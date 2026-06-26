@@ -2,7 +2,7 @@
 // @name         KH Address Picker — Cambodia Bilingual Address Lookup
 // @namespace    https://github.com/im4tta/kh-address-picker
 // @version      1.2.0
-// @description  🇰🇭 Bilingual Cambodia administrative address picker (province → district → commune → village) with search. Data is fetched from GitHub and cached locally.
+// @description  🇰🇭 Bilingual Cambodia administrative address picker (province → district → commune → village) with search. Draggable, theme-proof UI. Data is fetched from GitHub and cached locally.
 // @author       im4tta
 // @match        *://*/*
 // @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjE4IiBmaWxsPSIjMDMyZWE1Ii8+PHJlY3QgeT0iMzMiIHdpZHRoPSIxMDAiIGhlaWdodD0iMzQiIGZpbGw9IiNlMDAwMjUiLz48L3N2Zz4=
@@ -27,41 +27,143 @@
   const DATA_URL = 'https://raw.githubusercontent.com/im4tta/kh-address-picker/main/data/tree-data.json';
   const CACHE_DATA_KEY = 'kh_addr_tree_data_v1';
   const CACHE_META_KEY = 'kh_addr_tree_meta_v1';
+  const FAB_POS_KEY = 'kh_addr_fab_pos_v1';
+  const PANEL_POS_KEY = 'kh_addr_panel_pos_v1';
   const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // re-check for fresh data once a day
   const FETCH_TIMEOUT_MS = 15000;
 
   let tree = null, searchIndex = null, fabEl, panelEl, bodyEl;
 
   const STYLE = `
-    #kh-addr-fab { position: fixed; bottom: 20px; right: 20px; width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, #032ea5, #0066cc); color: white; font-size: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 999999; user-select: none; }
-    #kh-addr-fab:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.25); transform: scale(1.05); }
-    #kh-addr-panel { position: fixed; bottom: 80px; right: 20px; width: 380px; max-height: 600px; background: white; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.15); z-index: 999998; display: none; flex-direction: column; }
-    #kh-addr-panel.open { display: flex; }
-    .kh-addr-header { padding: 16px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; }
-    .kh-addr-header h3 { margin: 0; font-size: 16px; font-weight: 600; }
-    .kh-addr-close { cursor: pointer; font-size: 20px; color: #666; }
-    .kh-addr-body { flex: 1; overflow-y: auto; padding: 12px; }
-    .kh-addr-footer { padding: 8px 12px; border-top: 1px solid #e0e0e0; font-size: 11px; color: #999; }
-    .kh-addr-search { width: 100%; padding: 8px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
-    .kh-addr-search-results { border: 1px solid #ddd; border-radius: 6px; max-height: 200px; overflow-y: auto; margin-bottom: 12px; display: none; }
-    .kh-addr-search-row { padding: 8px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
-    .kh-addr-search-row:hover { background: #f5f5f5; }
-    .kh-addr-search-row b { display: block; font-size: 13px; margin-bottom: 2px; }
-    .kh-addr-search-row span { color: #666; }
-    .kh-addr-select { width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
-    .kh-addr-result { display: none; background: #f9f9f9; padding: 12px; border-radius: 6px; margin-top: 12px; border: 1px solid #e0e0e0; }
-    .kh-addr-result.show { display: block; }
-    .kh-addr-result-line { padding: 6px 0; font-size: 12px; line-height: 1.4; }
-    .kh-addr-result-line b { color: #032ea5; font-weight: 600; min-width: 60px; display: inline-block; }
-    .kh-addr-copy-row { display: flex; gap: 8px; margin-top: 10px; }
-    .kh-addr-btn { flex: 1; padding: 8px; background: #032ea5; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; }
+    /* Every widget element forces its own colors so it stays readable on any
+       host page, including sites in dark mode. Never inherit color/background. */
+    #kh-addr-fab, #kh-addr-panel, #kh-addr-panel * {
+      color-scheme: light;
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* ---- Floating action button ---- */
+    #kh-addr-fab {
+      position: fixed; bottom: 24px; right: 24px; width: 54px; height: 54px;
+      border-radius: 50%; background: linear-gradient(135deg, #032ea5, #0066cc);
+      color: #ffffff; font-size: 26px; cursor: grab; display: flex;
+      align-items: center; justify-content: center; line-height: 1;
+      box-shadow: 0 6px 18px rgba(3,46,165,0.35); z-index: 2147483646;
+      user-select: none; touch-action: none;
+      transition: transform .15s ease, box-shadow .15s ease;
+    }
+    #kh-addr-fab:hover { box-shadow: 0 8px 22px rgba(3,46,165,0.45); transform: scale(1.06); }
+    #kh-addr-fab:active { cursor: grabbing; transform: scale(0.98); }
+    #kh-addr-fab.kh-dragging { cursor: grabbing; transition: none; box-shadow: 0 10px 28px rgba(0,0,0,0.4); }
+
+    /* ---- Panel ---- */
+    #kh-addr-panel {
+      position: fixed; bottom: 90px; right: 24px; width: 380px; max-height: 76vh;
+      background: #ffffff; color: #1a1a1a; border: 1px solid #e3e3e3;
+      border-radius: 14px; box-shadow: 0 16px 48px rgba(0,0,0,0.28);
+      z-index: 2147483647; display: none; flex-direction: column; overflow: hidden;
+      opacity: 0; transform: translateY(8px) scale(.98);
+      transition: opacity .16s ease, transform .16s ease;
+    }
+    #kh-addr-panel.open { display: flex; opacity: 1; transform: translateY(0) scale(1); }
+    #kh-addr-panel.kh-dragging { transition: none; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+
+    /* ---- Header (drag handle) ---- */
+    .kh-addr-header {
+      padding: 13px 14px; display: flex; justify-content: space-between;
+      align-items: center; gap: 8px; cursor: move; touch-action: none;
+      background: linear-gradient(135deg, #032ea5, #0066cc); color: #ffffff;
+      user-select: none;
+    }
+    .kh-addr-header-left { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .kh-addr-grip { display: flex; flex-direction: column; gap: 2px; opacity: .7; flex: none; }
+    .kh-addr-grip span { display: block; width: 14px; height: 2px; border-radius: 2px; background: #ffffff; }
+    .kh-addr-header h3 { margin: 0; font-size: 15px; font-weight: 600; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .kh-addr-close {
+      cursor: pointer; font-size: 16px; color: #ffffff; flex: none;
+      width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+      border-radius: 6px; transition: background .12s ease;
+    }
+    .kh-addr-close:hover { background: rgba(255,255,255,0.22); }
+
+    /* ---- Body ---- */
+    .kh-addr-body { flex: 1; overflow-y: auto; padding: 14px; background: #ffffff; color: #1a1a1a; }
+    .kh-addr-body::-webkit-scrollbar { width: 9px; }
+    .kh-addr-body::-webkit-scrollbar-thumb { background: #cfcfcf; border-radius: 6px; }
+    .kh-addr-body::-webkit-scrollbar-thumb:hover { background: #b5b5b5; }
+
+    .kh-addr-field-label { display: block; font-size: 11px; font-weight: 600; color: #555555; margin: 0 0 4px 2px; text-transform: uppercase; letter-spacing: .3px; }
+    .kh-addr-divider { display: flex; align-items: center; gap: 8px; margin: 14px 0 10px; color: #999999; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+    .kh-addr-divider::before, .kh-addr-divider::after { content: ""; flex: 1; height: 1px; background: #ececec; }
+
+    /* ---- Footer ---- */
+    .kh-addr-footer { padding: 9px 14px; border-top: 1px solid #eee; font-size: 11px; color: #999999; background: #fafafa; text-align: center; }
+
+    /* ---- Search ---- */
+    .kh-addr-search-wrap { position: relative; }
+    .kh-addr-search {
+      width: 100%; padding: 10px 12px 10px 34px; border: 1px solid #d8d8d8; border-radius: 9px;
+      font-size: 14px; background: #ffffff; color: #1a1a1a; transition: border-color .12s ease, box-shadow .12s ease;
+    }
+    .kh-addr-search:focus { outline: none; border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
+    .kh-addr-search::placeholder { color: #9a9a9a; }
+    .kh-addr-search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: #9a9a9a; font-size: 14px; pointer-events: none; }
+    .kh-addr-search-results { border: 1px solid #e0e0e0; border-radius: 9px; max-height: 220px; overflow-y: auto; margin-top: 8px; display: none; background: #ffffff; box-shadow: 0 4px 14px rgba(0,0,0,0.07); }
+    .kh-addr-search-row { padding: 9px 11px; cursor: pointer; border-bottom: 1px solid #f2f2f2; font-size: 12px; color: #1a1a1a; }
+    .kh-addr-search-row:last-child { border-bottom: none; }
+    .kh-addr-search-row:hover { background: #f3f7ff; }
+    .kh-addr-search-row b { display: block; font-size: 13px; margin-bottom: 2px; color: #1a1a1a; }
+    .kh-addr-search-row span { color: #777777; }
+
+    /* ---- Selects ---- */
+    .kh-addr-select {
+      width: 100%; padding: 9px 11px; margin-bottom: 9px; border: 1px solid #d8d8d8; border-radius: 9px;
+      font-size: 13px; background: #ffffff; color: #1a1a1a; cursor: pointer; transition: border-color .12s ease, box-shadow .12s ease;
+    }
+    .kh-addr-select:focus { outline: none; border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
+    .kh-addr-select:disabled { background: #f4f4f4; color: #aaaaaa; cursor: not-allowed; }
+    .kh-addr-select option { background: #ffffff; color: #1a1a1a; }
+
+    /* ---- Result card ---- */
+    .kh-addr-result { display: none; background: #f7f9ff; padding: 13px; border-radius: 10px; margin-top: 6px; border: 1px solid #e2e9ff; color: #1a1a1a; }
+    .kh-addr-result.show { display: block; animation: kh-fade .18s ease; }
+    @keyframes kh-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .kh-addr-result-line { padding: 5px 0; font-size: 12.5px; line-height: 1.45; color: #1a1a1a; display: flex; gap: 8px; }
+    .kh-addr-result-line b { color: #032ea5; font-weight: 700; min-width: 64px; flex: none; }
+    .kh-addr-copy-row { display: flex; gap: 7px; margin-top: 12px; flex-wrap: wrap; }
+
+    /* ---- Buttons ---- */
+    .kh-addr-btn { flex: 1 1 auto; min-width: 92px; padding: 9px 10px; background: #032ea5; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; transition: background .12s ease, transform .05s ease; }
     .kh-addr-btn:hover { background: #0066cc; }
-    .kh-addr-btn.secondary { background: #ddd; color: #333; }
-    .kh-addr-btn.secondary:hover { background: #ccc; }
-    .kh-addr-status { padding: 32px 16px; text-align: center; color: #999; font-size: 13px; }
+    .kh-addr-btn:active { transform: scale(0.97); }
+    .kh-addr-btn.secondary { background: #eef0f4; color: #333333; }
+    .kh-addr-btn.secondary:hover { background: #e2e5ea; }
+    .kh-addr-clear { width: 100%; margin-top: 4px; padding: 8px; background: transparent; color: #c0392b; border: 1px solid #f0d4d0; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; transition: background .12s ease; }
+    .kh-addr-clear:hover { background: #fdf2f1; }
+
+    /* ---- Status / spinner ---- */
+    .kh-addr-status { padding: 36px 16px; text-align: center; color: #888888; font-size: 13px; }
     .kh-addr-status.error { color: #c0392b; }
-    .kh-addr-status small { display: block; margin-top: 6px; color: #aaa; font-size: 11px; word-break: break-word; }
+    .kh-addr-status small { display: block; margin-top: 6px; color: #aaaaaa; font-size: 11px; word-break: break-word; }
+    .kh-addr-spinner { width: 26px; height: 26px; margin: 0 auto 12px; border: 3px solid #e0e0e0; border-top-color: #032ea5; border-radius: 50%; animation: kh-spin .8s linear infinite; }
+    @keyframes kh-spin { to { transform: rotate(360deg); } }
+
+    /* ---- Toast ---- */
+    #kh-addr-toast {
+      position: fixed; left: 50%; bottom: 36px; transform: translateX(-50%) translateY(20px);
+      background: #1a1a1a; color: #ffffff; padding: 10px 18px; border-radius: 999px;
+      font-size: 13px; font-weight: 500; z-index: 2147483647; opacity: 0; pointer-events: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3); transition: opacity .2s ease, transform .2s ease;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #kh-addr-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 460px) {
+      #kh-addr-panel { width: calc(100vw - 24px); right: 12px; left: 12px; }
+    }
   `;
+
 
   // ================================================================
   // Data loading: cache-first, with a background refresh when stale.
@@ -164,7 +266,33 @@
     return index;
   }
 
+  // ================================================================
+  // Toast + clipboard
+  // ================================================================
+  let toastTimer;
+  function showToast(msg) {
+    let toast = document.getElementById('kh-addr-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'kh-addr-toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    requestAnimationFrame(() => toast.classList.add('show'));
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 1600);
+  }
+
   function copyText(text) {
+    const done = () => showToast('✓ Copied to clipboard');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+    } else {
+      fallbackCopy(text, done);
+    }
+  }
+
+  function fallbackCopy(text, done) {
     const textArea = document.createElement('textarea');
     textArea.value = text;
     textArea.style.position = 'fixed';
@@ -173,13 +301,9 @@
     textArea.select();
     try {
       document.execCommand('copy');
-      const temp = document.createElement('div');
-      temp.textContent = '✓ Copied';
-      temp.style.cssText = 'position:fixed;bottom:100px;right:30px;background:#032ea5;color:white;padding:8px 12px;border-radius:4px;font-size:12px;z-index:1000000;';
-      document.body.appendChild(temp);
-      setTimeout(() => temp.remove(), 1500);
+      done();
     } catch (e) {
-      alert('Copy failed: ' + e.message);
+      showToast('Copy failed');
     }
     document.body.removeChild(textArea);
   }
@@ -188,7 +312,7 @@
   // Status / error states inside the panel body
   // ================================================================
   function showStatus(msg) {
-    bodyEl.innerHTML = `<div class="kh-addr-status">${msg}</div>`;
+    bodyEl.innerHTML = `<div class="kh-addr-status"><div class="kh-addr-spinner"></div>${msg}</div>`;
   }
 
   function showError(err) {
@@ -196,7 +320,7 @@
       <div class="kh-addr-status error">
         Could not load address data.
         <small>${(err && err.message) || err}</small>
-        <div style="margin-top:12px;"><button class="kh-addr-btn" id="kh-addr-retry">Retry</button></div>
+        <div style="margin-top:14px;"><button class="kh-addr-btn" id="kh-addr-retry">Retry</button></div>
       </div>`;
     document.getElementById('kh-addr-retry').addEventListener('click', loadData);
   }
@@ -205,31 +329,33 @@
   // Picker UI
   // ================================================================
   function renderPicker() {
-    const selProvince = document.createElement('select');
-    selProvince.className = 'kh-addr-select';
-    const selDistrict = document.createElement('select');
-    selDistrict.className = 'kh-addr-select';
-    const selCommune = document.createElement('select');
-    selCommune.className = 'kh-addr-select';
-    const selVillage = document.createElement('select');
-    selVillage.className = 'kh-addr-select';
-    const searchInput = document.createElement('input');
-    searchInput.type = 'text';
-    searchInput.placeholder = 'Search village, commune, district…';
-    searchInput.className = 'kh-addr-search';
-    const searchResultsEl = document.createElement('div');
-    searchResultsEl.className = 'kh-addr-search-results';
-    const resultEl = document.createElement('div');
-    resultEl.className = 'kh-addr-result';
+    bodyEl.innerHTML = `
+      <div class="kh-addr-search-wrap">
+        <span class="kh-addr-search-icon">🔍</span>
+        <input type="text" class="kh-addr-search" placeholder="Search village, commune, district…" />
+      </div>
+      <div class="kh-addr-search-results"></div>
+      <div class="kh-addr-divider">or pick step by step</div>
+      <label class="kh-addr-field-label">Province / ខេត្ត</label>
+      <select class="kh-addr-select" data-role="province"></select>
+      <label class="kh-addr-field-label">District / ស្រុក</label>
+      <select class="kh-addr-select" data-role="district"></select>
+      <label class="kh-addr-field-label">Commune / ឃុំ</label>
+      <select class="kh-addr-select" data-role="commune"></select>
+      <label class="kh-addr-field-label">Village / ភូមិ</label>
+      <select class="kh-addr-select" data-role="village"></select>
+      <div class="kh-addr-result"></div>
+      <button class="kh-addr-clear" style="display:none;">Clear selection</button>
+    `;
 
-    bodyEl.innerHTML = '';
-    bodyEl.appendChild(searchInput);
-    bodyEl.appendChild(searchResultsEl);
-    bodyEl.appendChild(selProvince);
-    bodyEl.appendChild(selDistrict);
-    bodyEl.appendChild(selCommune);
-    bodyEl.appendChild(selVillage);
-    bodyEl.appendChild(resultEl);
+    const searchInput = bodyEl.querySelector('.kh-addr-search');
+    const searchResultsEl = bodyEl.querySelector('.kh-addr-search-results');
+    const selProvince = bodyEl.querySelector('[data-role="province"]');
+    const selDistrict = bodyEl.querySelector('[data-role="district"]');
+    const selCommune = bodyEl.querySelector('[data-role="commune"]');
+    const selVillage = bodyEl.querySelector('[data-role="village"]');
+    const resultEl = bodyEl.querySelector('.kh-addr-result');
+    const clearBtn = bodyEl.querySelector('.kh-addr-clear');
 
     selProvince.innerHTML = '<option value="">Select province…</option>';
     tree.forEach(p => {
@@ -238,6 +364,9 @@
       opt.textContent = `${p.kh} / ${p.en}`;
       selProvince.appendChild(opt);
     });
+    resetSelect(selDistrict, 'Select district…');
+    resetSelect(selCommune, 'Select commune…');
+    resetSelect(selVillage, 'Select village…');
 
     function resetSelect(sel, placeholder) {
       sel.innerHTML = `<option value="">${placeholder}</option>`;
@@ -250,16 +379,17 @@
       const c = d?.communes.find(x => x.code === selCommune.value);
       const v = c?.villages.find(x => x.code === selVillage.value);
 
-      if (!p) { resultEl.classList.remove('show'); return; }
+      if (!p) { resultEl.classList.remove('show'); clearBtn.style.display = 'none'; return; }
+      clearBtn.style.display = 'block';
 
       const khParts = [v?.kh, c?.kh, d?.kh, p?.kh].filter(Boolean);
       const enParts = [v?.en, c?.en, d?.en, p?.en].filter(Boolean);
       const codes = [p.code, d?.code, c?.code, v?.code].filter(Boolean).join(' / ');
 
       resultEl.innerHTML = `
-        <div class="kh-addr-result-line"><b>Khmer</b>${khParts.join(', ')}</div>
-        <div class="kh-addr-result-line"><b>English</b>${enParts.join(', ')}</div>
-        <div class="kh-addr-result-line"><b>Codes</b>${codes}</div>
+        <div class="kh-addr-result-line"><b>Khmer</b><span>${khParts.join(', ')}</span></div>
+        <div class="kh-addr-result-line"><b>English</b><span>${enParts.join(', ')}</span></div>
+        <div class="kh-addr-result-line"><b>Codes</b><span>${codes}</span></div>
         <div class="kh-addr-copy-row">
           <button class="kh-addr-btn" id="kh-copy-kh">Copy Khmer</button>
           <button class="kh-addr-btn secondary" id="kh-copy-en">Copy English</button>
@@ -328,6 +458,14 @@
     selCommune.addEventListener('change', e => setCommune(e.target.value));
     selVillage.addEventListener('change', fillCurrentResult);
 
+    clearBtn.addEventListener('click', () => {
+      setProvince('');
+      searchInput.value = '';
+      searchResultsEl.style.display = 'none';
+      searchResultsEl.innerHTML = '';
+      searchInput.focus();
+    });
+
     let searchDebounce;
     searchInput.addEventListener('input', () => {
       clearTimeout(searchDebounce);
@@ -337,7 +475,7 @@
         const matches = searchIndex.filter(row => row.haystack.includes(q)).slice(0, 30);
         if (!matches.length) {
           searchResultsEl.style.display = 'block';
-          searchResultsEl.innerHTML = '<div class="kh-addr-search-row" style="opacity:.5;">No matches</div>';
+          searchResultsEl.innerHTML = '<div class="kh-addr-search-row" style="opacity:.5;cursor:default;">No matches found</div>';
           return;
         }
         searchResultsEl.style.display = 'block';
@@ -363,6 +501,85 @@
   }
 
   // ================================================================
+  // Dragging — works for both the FAB and the panel header.
+  // Distinguishes a click (open/close) from a drag via a movement threshold.
+  // Positions are clamped to the viewport and persisted via GM storage.
+  // ================================================================
+  const DRAG_THRESHOLD = 5; // px before a press counts as a drag
+
+  function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+  function savePos(key, pos) {
+    try { GM_setValue(key, JSON.stringify(pos)); } catch (e) { /* ignore */ }
+  }
+  function loadPos(key) {
+    try { const r = GM_getValue(key, null); return r ? JSON.parse(r) : null; } catch (e) { return null; }
+  }
+
+  // Make `handle` drag `target`. onClick fires only when the press did NOT move.
+  function makeDraggable(handle, target, storageKey, onClick) {
+    let startX, startY, originLeft, originTop, moved, dragging;
+
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      // Don't start a drag when interacting with controls inside the handle.
+      if (e.target.closest('.kh-addr-close')) return;
+
+      dragging = true; moved = false;
+      startX = e.clientX; startY = e.clientY;
+      const rect = target.getBoundingClientRect();
+      originLeft = rect.left; originTop = rect.top;
+      handle.setPointerCapture(e.pointerId);
+    });
+
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (!moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+
+      if (!moved) {
+        moved = true;
+        target.classList.add('kh-dragging');
+        // Switch from bottom/right anchoring to top/left so we can move freely.
+        target.style.bottom = 'auto';
+        target.style.right = 'auto';
+      }
+      const w = target.offsetWidth, h = target.offsetHeight;
+      const left = clamp(originLeft + dx, 4, window.innerWidth - w - 4);
+      const top = clamp(originTop + dy, 4, window.innerHeight - h - 4);
+      target.style.left = left + 'px';
+      target.style.top = top + 'px';
+    });
+
+    function endDrag(e) {
+      if (!dragging) return;
+      dragging = false;
+      try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (moved) {
+        target.classList.remove('kh-dragging');
+        const rect = target.getBoundingClientRect();
+        savePos(storageKey, { left: rect.left, top: rect.top });
+      } else if (typeof onClick === 'function') {
+        onClick();
+      }
+    }
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+  }
+
+  function applySavedPos(el, key) {
+    const pos = loadPos(key);
+    if (!pos) return false;
+    const w = el.offsetWidth, h = el.offsetHeight;
+    el.style.bottom = 'auto';
+    el.style.right = 'auto';
+    el.style.left = clamp(pos.left, 4, window.innerWidth - w - 4) + 'px';
+    el.style.top = clamp(pos.top, 4, window.innerHeight - h - 4) + 'px';
+    return true;
+  }
+
+  // ================================================================
   // Shell (fab + panel) — built once, data is loaded lazily on first open
   // ================================================================
   function buildShell() {
@@ -370,27 +587,76 @@
 
     fabEl = document.createElement('div');
     fabEl.id = 'kh-addr-fab';
-    fabEl.title = 'Cambodia Address Picker';
+    fabEl.title = 'Cambodia Address Picker · drag to move, click to open';
     fabEl.textContent = '🇰🇭';
     document.body.appendChild(fabEl);
 
     panelEl = document.createElement('div');
     panelEl.id = 'kh-addr-panel';
-    panelEl.innerHTML = `<div class="kh-addr-header"><h3>Cambodia Address Picker</h3><div class="kh-addr-close" id="kh-addr-close">✕</div></div><div class="kh-addr-body" id="kh-addr-body"></div><div class="kh-addr-footer">Data: Cambodia Geographical List · github.com/im4tta/kh-address-picker</div>`;
+    panelEl.innerHTML = `
+      <div class="kh-addr-header" id="kh-addr-header">
+        <div class="kh-addr-header-left">
+          <span class="kh-addr-grip"><span></span><span></span><span></span></span>
+          <h3>Cambodia Address Picker</h3>
+        </div>
+        <div class="kh-addr-close" id="kh-addr-close" title="Close">✕</div>
+      </div>
+      <div class="kh-addr-body" id="kh-addr-body"></div>
+      <div class="kh-addr-footer">Data: Cambodia Geographical List · github.com/im4tta/kh-address-picker</div>`;
     document.body.appendChild(panelEl);
     bodyEl = document.getElementById('kh-addr-body');
 
-    fabEl.addEventListener('click', () => {
-      const willOpen = !panelEl.classList.contains('open');
-      panelEl.classList.toggle('open');
-      if (!willOpen) return;
+    // Restore saved positions.
+    applySavedPos(fabEl, FAB_POS_KEY);
+
+    function openPanel() {
+      if (panelEl.classList.contains('open')) return;
+      // Position the panel near the FAB the first time, then remember its own spot.
+      if (!applySavedPos(panelEl, PANEL_POS_KEY)) positionPanelNearFab();
+      panelEl.classList.add('open');
       if (!tree) {
         loadData();
       } else if (cacheIsStale()) {
         refreshDataInBackground();
       }
+    }
+    function closePanel() { panelEl.classList.remove('open'); }
+    function togglePanel() {
+      panelEl.classList.contains('open') ? closePanel() : openPanel();
+    }
+
+    function positionPanelNearFab() {
+      const f = fabEl.getBoundingClientRect();
+      const w = 380, h = Math.min(window.innerHeight * 0.76, 520);
+      let left = f.right - w;            // align panel right edge with fab
+      let top = f.top - h - 12;          // place above the fab
+      if (top < 8) top = f.bottom + 12;  // not enough room above → go below
+      left = clamp(left, 8, window.innerWidth - w - 8);
+      top = clamp(top, 8, window.innerHeight - h - 8);
+      panelEl.style.bottom = 'auto';
+      panelEl.style.right = 'auto';
+      panelEl.style.left = left + 'px';
+      panelEl.style.top = top + 'px';
+    }
+
+    // FAB: draggable, and a non-drag press opens/closes the panel.
+    makeDraggable(fabEl, fabEl, FAB_POS_KEY, togglePanel);
+    // Panel: draggable by its header.
+    makeDraggable(document.getElementById('kh-addr-header'), panelEl, PANEL_POS_KEY, null);
+
+    document.getElementById('kh-addr-close').addEventListener('click', closePanel);
+
+    // Close on Escape for convenience.
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && panelEl.classList.contains('open')) closePanel();
     });
-    document.getElementById('kh-addr-close').addEventListener('click', () => panelEl.classList.remove('open'));
+
+    // Keep everything on-screen if the window is resized.
+    window.addEventListener('resize', () => {
+      [[fabEl, FAB_POS_KEY], [panelEl, PANEL_POS_KEY]].forEach(([el, key]) => {
+        if (el.style.left) applySavedPos(el, key);
+      });
+    });
   }
 
   function init() {
