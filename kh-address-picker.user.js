@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KH Address Picker — Cambodia Bilingual Address Lookup
 // @namespace    https://github.com/im4tta/kh-address-picker
-// @version      1.1.0
+// @version      1.2.0
 // @description  🇰🇭 Bilingual Cambodia administrative address picker (province → district → commune → village) with search. Data is fetched from GitHub and cached locally.
 // @author       im4tta
 // @match        *://*/*
